@@ -120,8 +120,18 @@ describe('createObfuscationJob', () => {
 
     // Obfuscated code should be different from original
     expect(obfuscatedCode).not.toEqual(pythonInput.code);
-    expect(obfuscatedCode.length).toBeGreaterThan(pythonInput.code.length); // Should have added comments
+    expect(obfuscatedCode.length).toBeGreaterThan(pythonInput.code.length); // Should have added protection code
     expect(obfuscatedCode).toContain('#'); // Should contain obfuscation comments
+    
+    // Should contain runtime protection features
+    expect(obfuscatedCode).toContain('import sys');
+    expect(obfuscatedCode).toContain('import hashlib');
+    expect(obfuscatedCode).toContain('import datetime');
+    expect(obfuscatedCode).toContain('import pytz');
+    expect(obfuscatedCode).toContain('Enter password:');
+    expect(obfuscatedCode).toContain('Access denied. Invalid password.');
+    expect(obfuscatedCode).toContain('Script has expired');
+    expect(obfuscatedCode).toContain('Asia/Kuala_Lumpur');
   });
 
   it('should obfuscate JavaScript code differently from original', async () => {
@@ -137,8 +147,18 @@ describe('createObfuscationJob', () => {
 
     // Obfuscated code should be different from original
     expect(obfuscatedCode).not.toEqual(javascriptInput.code);
-    expect(obfuscatedCode.length).toBeGreaterThan(javascriptInput.code.length); // Should have added comments
+    expect(obfuscatedCode.length).toBeGreaterThan(javascriptInput.code.length); // Should have added protection code
     expect(obfuscatedCode).toContain('//'); // Should contain obfuscation comments
+    
+    // Should contain runtime protection features
+    expect(obfuscatedCode).toContain('Protected JavaScript Code');
+    expect(obfuscatedCode).toContain('require(\'crypto\')');
+    expect(obfuscatedCode).toContain('require(\'readline\')');
+    expect(obfuscatedCode).toContain('Enter password:');
+    expect(obfuscatedCode).toContain('Access denied. Invalid password.');
+    expect(obfuscatedCode).toContain('Script has expired');
+    expect(obfuscatedCode).toContain('Asia/Kuala_Lumpur');
+    expect(obfuscatedCode).toContain('createHash(\'sha256\')');
   });
 
   it('should generate unique download tokens for multiple jobs', async () => {
@@ -165,5 +185,63 @@ describe('createObfuscationJob', () => {
       .execute();
 
     expect(jobs[0].expiration_date.getTime()).toEqual(expirationDate.getTime());
+  });
+
+  it('should embed password hash in Python obfuscated code', async () => {
+    const result = await createObfuscationJob(pythonInput);
+
+    const jobs = await db.select()
+      .from(obfuscationJobsTable)
+      .where(eq(obfuscationJobsTable.id, result.id))
+      .execute();
+
+    const obfuscatedCode = jobs[0].obfuscated_code;
+    
+    // Should contain a SHA256 hash (64 character hex string)
+    const hashPattern = /[a-f0-9]{64}/;
+    expect(hashPattern.test(obfuscatedCode)).toBe(true);
+    
+    // Should not contain the plain text password
+    expect(obfuscatedCode).not.toContain(pythonInput.password);
+  });
+
+  it('should embed password hash in JavaScript obfuscated code', async () => {
+    const result = await createObfuscationJob(javascriptInput);
+
+    const jobs = await db.select()
+      .from(obfuscationJobsTable)
+      .where(eq(obfuscationJobsTable.id, result.id))
+      .execute();
+
+    const obfuscatedCode = jobs[0].obfuscated_code;
+    
+    // Should contain a SHA256 hash (64 character hex string) for Node.js
+    const hashPattern = /[a-f0-9]{64}/;
+    expect(hashPattern.test(obfuscatedCode)).toBe(true);
+    
+    // Should not contain the plain text password
+    expect(obfuscatedCode).not.toContain(javascriptInput.password);
+  });
+
+  it('should embed expiration date components in obfuscated code', async () => {
+    const expirationDate = new Date('2025-06-15T14:30:45Z');
+    const inputWithSpecificDate: CreateObfuscationJobInput = {
+      ...pythonInput,
+      expiration_date: expirationDate
+    };
+
+    const result = await createObfuscationJob(inputWithSpecificDate);
+
+    const jobs = await db.select()
+      .from(obfuscationJobsTable)
+      .where(eq(obfuscationJobsTable.id, result.id))
+      .execute();
+
+    const obfuscatedCode = jobs[0].obfuscated_code;
+    
+    // Should contain year, month, day components
+    expect(obfuscatedCode).toContain('2025');
+    expect(obfuscatedCode).toContain('06'); // Month
+    expect(obfuscatedCode).toContain('15'); // Day
   });
 });
