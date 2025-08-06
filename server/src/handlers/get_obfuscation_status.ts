@@ -1,23 +1,24 @@
 
+import { db } from '../db';
+import { obfuscationJobsTable } from '../db/schema';
+import { eq } from 'drizzle-orm';
 import { type ObfuscationJob } from '../schema';
 
 export async function getObfuscationStatus(jobId: number): Promise<ObfuscationJob | null> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to:
-    // 1. Retrieve obfuscation job status by ID
-    // 2. Return job details including creation time, expiration, etc.
-    // 3. Handle cases where job ID doesn't exist
-    // 4. Check if download link is still valid
-    
-    return {
-        id: jobId,
-        original_filename: 'example.py',
-        language: 'python',
-        password: 'hidden', // Should not return actual password
-        expiration_date: new Date(),
-        obfuscated_code: '# Hidden obfuscated code',
-        download_token: 'placeholder-token',
-        created_at: new Date(),
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000)
-    };
+  try {
+    const result = await db.select()
+      .from(obfuscationJobsTable)
+      .where(eq(obfuscationJobsTable.id, jobId))
+      .execute();
+
+    if (result.length === 0) {
+      return null;
+    }
+
+    // Return the job as-is since all fields match between database schema and return type
+    return result[0];
+  } catch (error) {
+    console.error('Failed to get obfuscation status:', error);
+    throw error;
+  }
 }
