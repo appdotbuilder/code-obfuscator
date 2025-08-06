@@ -1,239 +1,7 @@
-
 import { db } from '../db';
 import { obfuscationJobsTable } from '../db/schema';
 import { type CreateObfuscationJobInput, type ObfuscationResult } from '../schema';
 import { randomBytes } from 'crypto';
-
-// Enhanced obfuscation functions with runtime protection
-const obfuscatePython = (code: string, password: string, expirationDate: Date): string => {
-  // Generate random variable names for obfuscation
-  const varMap = new Map<string, string>();
-  const getObfuscatedName = (original: string): string => {
-    if (!varMap.has(original)) {
-      varMap.set(original, '_' + randomBytes(4).toString('hex'));
-    }
-    return varMap.get(original)!;
-  };
-
-  // Obfuscate variable names (preserve Python keywords and built-ins)
-  const pythonKeywords = new Set(['def', 'class', 'if', 'for', 'while', 'try', 'except', 'import', 'from', 'as', 'with', 'return', 'yield', 'pass', 'break', 'continue', 'global', 'nonlocal', 'lambda', 'and', 'or', 'not', 'in', 'is', 'True', 'False', 'None', 'print', 'len', 'range', 'str', 'int', 'float', 'list', 'dict', 'set', 'tuple']);
-  
-  let obfuscatedCode = code;
-  
-  // Replace variable assignments
-  obfuscatedCode = obfuscatedCode.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g, (match, varName) => {
-    if (pythonKeywords.has(varName)) {
-      return match;
-    }
-    return match.replace(varName, getObfuscatedName(varName));
-  });
-
-  // Replace variable usage
-  obfuscatedCode = obfuscatedCode.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g, (match, varName) => {
-    if (pythonKeywords.has(varName) || !varMap.has(varName)) {
-      return match;
-    }
-    return getObfuscatedName(varName);
-  });
-
-  // Format expiration date for Malaysia timezone
-  const malaysiaDate = expirationDate.toLocaleString('sv-SE', { timeZone: 'Asia/Kuala_Lumpur' });
-  const [datePart, timePart] = malaysiaDate.split(' ');
-  const [year, month, day] = datePart.split('-');
-  const [hour, minute, second] = timePart.split(':');
-
-  // Create runtime protection wrapper
-  const protectedCode = `#!/usr/bin/env python3
-# Protected Python Script
-import sys
-import hashlib
-import datetime
-try:
-    import pytz
-except ImportError:
-    print("Error: pytz module is required. Install with: pip install pytz")
-    sys.exit(1)
-
-def ${getObfuscatedName('check_auth')}():
-    # Password verification
-    ${getObfuscatedName('user_input')} = input("Enter password: ")
-    ${getObfuscatedName('expected_hash')} = "${hashPassword(password)}"
-    ${getObfuscatedName('actual_hash')} = hashlib.sha256(${getObfuscatedName('user_input')}.encode()).hexdigest()
-    
-    if ${getObfuscatedName('actual_hash')} != ${getObfuscatedName('expected_hash')}:
-        print("Access denied. Invalid password.")
-        sys.exit(1)
-    
-    # Expiration check using Malaysia timezone
-    ${getObfuscatedName('malaysia_tz')} = pytz.timezone('Asia/Kuala_Lumpur')
-    ${getObfuscatedName('current_time')} = datetime.datetime.now(${getObfuscatedName('malaysia_tz')})
-    ${getObfuscatedName('expiry_time')} = ${getObfuscatedName('malaysia_tz')}.localize(datetime.datetime(${year}, ${month}, ${day}, ${hour}, ${minute}, ${Math.floor(parseFloat(second))}))
-    
-    if ${getObfuscatedName('current_time')} > ${getObfuscatedName('expiry_time')}:
-        print("Script has expired and cannot be executed.")
-        sys.exit(1)
-
-# Run authentication and expiration checks
-${getObfuscatedName('check_auth')}()
-
-# Original code (obfuscated)
-${obfuscatedCode.split('\n').map(line => line.trim() ? line + ' # ' + randomBytes(2).toString('hex') : line).join('\n')}
-`;
-
-  return protectedCode;
-};
-
-const obfuscateJavaScript = (code: string, password: string, expirationDate: Date): string => {
-  // Generate random variable names for obfuscation
-  const varMap = new Map<string, string>();
-  const getObfuscatedName = (original: string): string => {
-    if (!varMap.has(original)) {
-      varMap.set(original, '_' + randomBytes(4).toString('hex'));
-    }
-    return varMap.get(original)!;
-  };
-
-  // JavaScript keywords and built-ins to preserve
-  const jsKeywords = new Set(['var', 'let', 'const', 'function', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'default', 'break', 'continue', 'return', 'try', 'catch', 'finally', 'throw', 'new', 'this', 'typeof', 'instanceof', 'in', 'of', 'true', 'false', 'null', 'undefined', 'console', 'process', 'require', 'module', 'exports', 'window', 'document', 'Date', 'Array', 'Object', 'String', 'Number', 'Boolean']);
-
-  let obfuscatedCode = code;
-
-  // Replace variable declarations
-  obfuscatedCode = obfuscatedCode.replace(/\b(var|let|const)\s+([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, keyword, varName) => {
-    if (jsKeywords.has(varName)) {
-      return match;
-    }
-    const obfuscated = getObfuscatedName(varName);
-    return `${keyword} ${obfuscated}`;
-  });
-
-  // Replace function declarations
-  obfuscatedCode = obfuscatedCode.replace(/function\s+([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, funcName) => {
-    if (jsKeywords.has(funcName)) {
-      return match;
-    }
-    return `function ${getObfuscatedName(funcName)}`;
-  });
-
-  // Replace variable usage
-  obfuscatedCode = obfuscatedCode.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g, (match, varName) => {
-    if (jsKeywords.has(varName) || !varMap.has(varName)) {
-      return match;
-    }
-    return getObfuscatedName(varName);
-  });
-
-  // Format expiration date for Malaysia timezone (ISO string)
-  const malaysiaTime = new Date(expirationDate.toLocaleString('en-US', { timeZone: 'Asia/Kuala_Lumpur' }));
-  const expiryISO = malaysiaTime.toISOString();
-
-  // Create runtime protection wrapper
-  const protectedCode = `// Protected JavaScript Code
-(function() {
-    'use strict';
-    
-    function ${getObfuscatedName('checkAuth')}() {
-        // Password verification (Node.js environment)
-        if (typeof require !== 'undefined') {
-            const ${getObfuscatedName('crypto')} = require('crypto');
-            const ${getObfuscatedName('readline')} = require('readline');
-            
-            return new Promise((${getObfuscatedName('resolve')}, ${getObfuscatedName('reject')}) => {
-                const ${getObfuscatedName('rl')} = ${getObfuscatedName('readline')}.createInterface({
-                    input: process.stdin,
-                    output: process.stdout
-                });
-                
-                ${getObfuscatedName('rl')}.question('Enter password: ', (${getObfuscatedName('userInput')}) => {
-                    ${getObfuscatedName('rl')}.close();
-                    
-                    const ${getObfuscatedName('expectedHash')} = "${hashPassword(password)}";
-                    const ${getObfuscatedName('actualHash')} = ${getObfuscatedName('crypto')}.createHash('sha256').update(${getObfuscatedName('userInput')}).digest('hex');
-                    
-                    if (${getObfuscatedName('actualHash')} !== ${getObfuscatedName('expectedHash')}) {
-                        console.log('Access denied. Invalid password.');
-                        process.exit(1);
-                    }
-                    
-                    // Expiration check using Malaysia timezone
-                    const ${getObfuscatedName('currentTime')} = new Date();
-                    const ${getObfuscatedName('malaysiaTime')} = new Date(${getObfuscatedName('currentTime')}.toLocaleString('en-US', { timeZone: 'Asia/Kuala_Lumpur' }));
-                    const ${getObfuscatedName('expiryTime')} = new Date("${expiryISO}");
-                    
-                    if (${getObfuscatedName('malaysiaTime')} > ${getObfuscatedName('expiryTime')}) {
-                        console.log('Script has expired and cannot be executed.');
-                        process.exit(1);
-                    }
-                    
-                    ${getObfuscatedName('resolve')}();
-                });
-            });
-        } else {
-            // Browser environment
-            const ${getObfuscatedName('userInput')} = prompt('Enter password:');
-            if (!${getObfuscatedName('userInput')}) {
-                alert('Access denied. Password required.');
-                return;
-            }
-            
-            // Simple hash for browser (not as secure as Node.js crypto)
-            function ${getObfuscatedName('simpleHash')}(${getObfuscatedName('str')}) {
-                let ${getObfuscatedName('hash')} = 0;
-                for (let ${getObfuscatedName('i')} = 0; ${getObfuscatedName('i')} < ${getObfuscatedName('str')}.length; ${getObfuscatedName('i')}++) {
-                    const ${getObfuscatedName('char')} = ${getObfuscatedName('str')}.charCodeAt(${getObfuscatedName('i')});
-                    ${getObfuscatedName('hash')} = ((${getObfuscatedName('hash')} << 5) - ${getObfuscatedName('hash')}) + ${getObfuscatedName('char')};
-                    ${getObfuscatedName('hash')} = ${getObfuscatedName('hash')} & ${getObfuscatedName('hash')};
-                }
-                return ${getObfuscatedName('hash')}.toString(16);
-            }
-            
-            const ${getObfuscatedName('expectedSimpleHash')} = "${simpleHash(password)}";
-            if (${getObfuscatedName('simpleHash')}(${getObfuscatedName('userInput')}) !== ${getObfuscatedName('expectedSimpleHash')}) {
-                alert('Access denied. Invalid password.');
-                return;
-            }
-            
-            // Expiration check
-            const ${getObfuscatedName('currentTime')} = new Date();
-            const ${getObfuscatedName('malaysiaTime')} = new Date(${getObfuscatedName('currentTime')}.toLocaleString('en-US', { timeZone: 'Asia/Kuala_Lumpur' }));
-            const ${getObfuscatedName('expiryTime')} = new Date("${expiryISO}");
-            
-            if (${getObfuscatedName('malaysiaTime')} > ${getObfuscatedName('expiryTime')}) {
-                alert('Script has expired and cannot be executed.');
-                return;
-            }
-            
-            return Promise.resolve();
-        }
-    }
-    
-    // Execute protection check and original code
-    if (typeof require !== 'undefined') {
-        // Node.js environment - async execution
-        ${getObfuscatedName('checkAuth')}().then(() => {
-            // Original code (obfuscated)
-            ${obfuscatedCode.split('\n').map(line => line.trim() ? line + ' //' + randomBytes(2).toString('hex') : line).join('\n            ')}
-        }).catch(() => {
-            process.exit(1);
-        });
-    } else {
-        // Browser environment - sync execution
-        const ${getObfuscatedName('authResult')} = ${getObfuscatedName('checkAuth')}();
-        if (${getObfuscatedName('authResult')} instanceof Promise) {
-            ${getObfuscatedName('authResult')}.then(() => {
-                // Original code (obfuscated)
-                ${obfuscatedCode.split('\n').map(line => line.trim() ? line + ' //' + randomBytes(2).toString('hex') : line).join('\n                ')}
-            });
-        } else {
-            // Original code (obfuscated)
-            ${obfuscatedCode.split('\n').map(line => line.trim() ? line + ' //' + randomBytes(2).toString('hex') : line).join('\n            ')}
-        }
-    }
-})();
-`;
-
-  return protectedCode;
-};
 
 // Helper function to create SHA256 hash of password
 const hashPassword = (password: string): string => {
@@ -249,11 +17,356 @@ const simpleHash = (str: string): string => {
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
-  return hash.toString(16);
+  return Math.abs(hash).toString(16);
+};
+
+// Generate random identifier for obfuscation
+const generateObfuscatedName = (): string => {
+  return '_' + randomBytes(4).toString('hex');
+};
+
+// Enhanced Python obfuscation with runtime protection
+const obfuscatePython = (code: string, password: string, expirationDate: Date): string => {
+  // Generate random variable names for obfuscation
+  const varMap = new Map<string, string>();
+  const getObfuscatedName = (original: string): string => {
+    if (!varMap.has(original)) {
+      varMap.set(original, generateObfuscatedName());
+    }
+    return varMap.get(original)!;
+  };
+
+  // Python keywords and built-ins to preserve
+  const pythonReserved = new Set([
+    // Keywords
+    'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 'class', 
+    'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 
+    'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 
+    'raise', 'return', 'try', 'while', 'with', 'yield',
+    // Common built-ins
+    'print', 'len', 'range', 'str', 'int', 'float', 'list', 'dict', 'set', 'tuple', 
+    'input', 'open', 'type', 'isinstance', 'hasattr', 'getattr', 'setattr', 'min', 'max',
+    'sum', 'all', 'any', 'enumerate', 'zip', 'map', 'filter', 'sorted', 'reversed',
+    // System modules
+    'sys', 'os', 'datetime', 'hashlib', 'pytz'
+  ]);
+  
+  let obfuscatedCode = code;
+  
+  // Replace user-defined function definitions
+  obfuscatedCode = obfuscatedCode.replace(/def\s+([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, funcName) => {
+    if (pythonReserved.has(funcName)) {
+      return match;
+    }
+    return match.replace(funcName, getObfuscatedName(funcName));
+  });
+
+  // Replace class definitions
+  obfuscatedCode = obfuscatedCode.replace(/class\s+([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, className) => {
+    if (pythonReserved.has(className)) {
+      return match;
+    }
+    return match.replace(className, getObfuscatedName(className));
+  });
+
+  // Replace variable assignments (simple pattern)
+  obfuscatedCode = obfuscatedCode.replace(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*=/gm, (match, indent, varName) => {
+    if (pythonReserved.has(varName)) {
+      return match;
+    }
+    return `${indent}${getObfuscatedName(varName)} =`;
+  });
+
+  // Replace variable usage in common contexts
+  obfuscatedCode = obfuscatedCode.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g, (match, varName) => {
+    if (pythonReserved.has(varName) || !varMap.has(varName)) {
+      return match;
+    }
+    return getObfuscatedName(varName);
+  });
+
+  // Format expiration date for Malaysia timezone
+  const malaysiaDate = expirationDate.toLocaleString('sv-SE', { timeZone: 'Asia/Kuala_Lumpur' });
+  const [datePart, timePart] = malaysiaDate.split(' ');
+  const [year, month, day] = datePart.split('-');
+  const [hour, minute] = timePart.split(':');
+
+  // Generate obfuscated variable names for protection functions
+  const checkAuthFunc = generateObfuscatedName();
+  const userInputVar = generateObfuscatedName();
+  const expectedHashVar = generateObfuscatedName();
+  const actualHashVar = generateObfuscatedName();
+  const malaysiaTzVar = generateObfuscatedName();
+  const currentTimeVar = generateObfuscatedName();
+  const expiryTimeVar = generateObfuscatedName();
+
+  // Create runtime protection wrapper
+  const protectedCode = `#!/usr/bin/env python3
+# Protected Python Script - Generated Code
+import sys
+import hashlib
+import datetime
+try:
+    import pytz
+except ImportError:
+    print("Error: pytz module is required. Install with: pip install pytz")
+    sys.exit(1)
+
+def ${checkAuthFunc}():
+    # Password verification
+    ${userInputVar} = input("Enter password: ")
+    ${expectedHashVar} = "${hashPassword(password)}"
+    ${actualHashVar} = hashlib.sha256(${userInputVar}.encode()).hexdigest()
+    
+    if ${actualHashVar} != ${expectedHashVar}:
+        print("Access denied. Invalid password.")
+        sys.exit(1)
+    
+    # Expiration check using Malaysia timezone
+    ${malaysiaTzVar} = pytz.timezone('Asia/Kuala_Lumpur')
+    ${currentTimeVar} = datetime.datetime.now(${malaysiaTzVar})
+    ${expiryTimeVar} = ${malaysiaTzVar}.localize(datetime.datetime(${year}, ${month}, ${day}, ${hour}, ${minute}, 0))
+    
+    if ${currentTimeVar} > ${expiryTimeVar}:
+        print("Script has expired and cannot be executed.")
+        sys.exit(1)
+
+# Run authentication and expiration checks
+${checkAuthFunc}()
+
+# Original code (obfuscated)
+${obfuscatedCode.split('\n').map(line => {
+  if (line.trim()) {
+    return line + '  # ' + randomBytes(2).toString('hex');
+  }
+  return line;
+}).join('\n')}
+`;
+
+  return protectedCode;
+};
+
+// Enhanced JavaScript obfuscation with runtime protection
+const obfuscateJavaScript = (code: string, password: string, expirationDate: Date): string => {
+  // Generate random variable names for obfuscation
+  const varMap = new Map<string, string>();
+  const getObfuscatedName = (original: string): string => {
+    if (!varMap.has(original)) {
+      varMap.set(original, generateObfuscatedName());
+    }
+    return varMap.get(original)!;
+  };
+
+  // JavaScript keywords and built-ins to preserve
+  const jsReserved = new Set([
+    // Keywords
+    'var', 'let', 'const', 'function', 'if', 'else', 'for', 'while', 'do', 'switch', 
+    'case', 'default', 'break', 'continue', 'return', 'try', 'catch', 'finally', 
+    'throw', 'new', 'this', 'typeof', 'instanceof', 'in', 'of', 'true', 'false', 
+    'null', 'undefined',
+    // Built-ins
+    'console', 'process', 'require', 'module', 'exports', 'window', 'document', 
+    'Date', 'Array', 'Object', 'String', 'Number', 'Boolean', 'Math', 'JSON',
+    'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'alert', 'prompt', 'confirm',
+    // Common globals
+    'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'
+  ]);
+
+  let obfuscatedCode = code;
+
+  // Replace function declarations
+  obfuscatedCode = obfuscatedCode.replace(/function\s+([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, funcName) => {
+    if (jsReserved.has(funcName)) {
+      return match;
+    }
+    return `function ${getObfuscatedName(funcName)}`;
+  });
+
+  // Replace variable declarations
+  obfuscatedCode = obfuscatedCode.replace(/\b(var|let|const)\s+([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, keyword, varName) => {
+    if (jsReserved.has(varName)) {
+      return match;
+    }
+    return `${keyword} ${getObfuscatedName(varName)}`;
+  });
+
+  // Replace property assignments (simple pattern)
+  obfuscatedCode = obfuscatedCode.replace(/\.([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g, (match, propName) => {
+    if (jsReserved.has(propName)) {
+      return match;
+    }
+    return `.${getObfuscatedName(propName)} =`;
+  });
+
+  // Replace variable usage
+  obfuscatedCode = obfuscatedCode.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g, (match, varName) => {
+    if (jsReserved.has(varName) || !varMap.has(varName)) {
+      return match;
+    }
+    return getObfuscatedName(varName);
+  });
+
+  // Format expiration date for Malaysia timezone (ISO string)
+  const expiryISO = expirationDate.toISOString();
+
+  // Generate obfuscated variable names for protection functions
+  const checkAuthFunc = generateObfuscatedName();
+  const cryptoVar = generateObfuscatedName();
+  const readlineVar = generateObfuscatedName();
+  const resolveVar = generateObfuscatedName();
+  const rejectVar = generateObfuscatedName();
+  const rlVar = generateObfuscatedName();
+  const userInputVar = generateObfuscatedName();
+  const expectedHashVar = generateObfuscatedName();
+  const actualHashVar = generateObfuscatedName();
+  const currentTimeVar = generateObfuscatedName();
+  const malaysiaTimeVar = generateObfuscatedName();
+  const expiryTimeVar = generateObfuscatedName();
+  const simpleHashFunc = generateObfuscatedName();
+  const hashVar = generateObfuscatedName();
+  const iVar = generateObfuscatedName();
+  const charVar = generateObfuscatedName();
+  const strVar = generateObfuscatedName();
+  const expectedSimpleHashVar = generateObfuscatedName();
+  const authResultVar = generateObfuscatedName();
+
+  // Create runtime protection wrapper
+  const protectedCode = `// Protected JavaScript Code - Generated Code
+(function() {
+    'use strict';
+    
+    function ${checkAuthFunc}() {
+        // Check environment and handle accordingly
+        if (typeof require !== 'undefined' && typeof process !== 'undefined') {
+            // Node.js environment
+            const ${cryptoVar} = require('crypto');
+            const ${readlineVar} = require('readline');
+            
+            return new Promise((${resolveVar}, ${rejectVar}) => {
+                const ${rlVar} = ${readlineVar}.createInterface({
+                    input: process.stdin,
+                    output: process.stdout
+                });
+                
+                ${rlVar}.question('Enter password: ', (${userInputVar}) => {
+                    ${rlVar}.close();
+                    
+                    // Password verification
+                    const ${expectedHashVar} = "${hashPassword(password)}";
+                    const ${actualHashVar} = ${cryptoVar}.createHash('sha256').update(${userInputVar}).digest('hex');
+                    
+                    if (${actualHashVar} !== ${expectedHashVar}) {
+                        console.log('Access denied. Invalid password.');
+                        process.exit(1);
+                    }
+                    
+                    // Expiration check using Malaysia timezone
+                    const ${currentTimeVar} = new Date();
+                    const ${malaysiaTimeVar} = new Date(${currentTimeVar}.toLocaleString('en-US', { timeZone: 'Asia/Kuala_Lumpur' }));
+                    const ${expiryTimeVar} = new Date("${expiryISO}");
+                    
+                    if (${malaysiaTimeVar} > ${expiryTimeVar}) {
+                        console.log('Script has expired and cannot be executed.');
+                        process.exit(1);
+                    }
+                    
+                    ${resolveVar}();
+                });
+            });
+        } else {
+            // Browser environment
+            const ${userInputVar} = prompt('Enter password:');
+            if (!${userInputVar}) {
+                alert('Access denied. Password required.');
+                return;
+            }
+            
+            // Simple hash function for browser
+            function ${simpleHashFunc}(${strVar}) {
+                let ${hashVar} = 0;
+                for (let ${iVar} = 0; ${iVar} < ${strVar}.length; ${iVar}++) {
+                    const ${charVar} = ${strVar}.charCodeAt(${iVar});
+                    ${hashVar} = ((${hashVar} << 5) - ${hashVar}) + ${charVar};
+                    ${hashVar} = ${hashVar} & ${hashVar};
+                }
+                return Math.abs(${hashVar}).toString(16);
+            }
+            
+            // Password verification
+            const ${expectedSimpleHashVar} = "${simpleHash(password)}";
+            if (${simpleHashFunc}(${userInputVar}) !== ${expectedSimpleHashVar}) {
+                alert('Access denied. Invalid password.');
+                return;
+            }
+            
+            // Expiration check
+            const ${currentTimeVar} = new Date();
+            const ${malaysiaTimeVar} = new Date(${currentTimeVar}.toLocaleString('en-US', { timeZone: 'Asia/Kuala_Lumpur' }));
+            const ${expiryTimeVar} = new Date("${expiryISO}");
+            
+            if (${malaysiaTimeVar} > ${expiryTimeVar}) {
+                alert('Script has expired and cannot be executed.');
+                return;
+            }
+            
+            return Promise.resolve();
+        }
+    }
+    
+    // Execute protection check and original code
+    if (typeof require !== 'undefined' && typeof process !== 'undefined') {
+        // Node.js environment - async execution
+        ${checkAuthFunc}().then(() => {
+            // Original code (obfuscated)
+${obfuscatedCode.split('\n').map(line => {
+  if (line.trim()) {
+    return '            ' + line + ' //' + randomBytes(2).toString('hex');
+  }
+  return line;
+}).join('\n')}
+        }).catch(() => {
+            process.exit(1);
+        });
+    } else {
+        // Browser environment - sync execution
+        const ${authResultVar} = ${checkAuthFunc}();
+        if (${authResultVar} instanceof Promise) {
+            ${authResultVar}.then(() => {
+                // Original code (obfuscated)
+${obfuscatedCode.split('\n').map(line => {
+  if (line.trim()) {
+    return '                ' + line + ' //' + randomBytes(2).toString('hex');
+  }
+  return line;
+}).join('\n')}
+            });
+        } else {
+            // Original code (obfuscated)
+${obfuscatedCode.split('\n').map(line => {
+  if (line.trim()) {
+    return '            ' + line + ' //' + randomBytes(2).toString('hex');
+  }
+  return line;
+}).join('\n')}
+        }
+    }
+})();
+`;
+
+  return protectedCode;
 };
 
 export async function createObfuscationJob(input: CreateObfuscationJobInput): Promise<ObfuscationResult> {
   try {
+    // Validate input
+    if (!input.code.trim()) {
+      throw new Error('Code cannot be empty');
+    }
+    
+    if (!input.password.trim()) {
+      throw new Error('Password is required');
+    }
+
     // Obfuscate the code based on language with runtime protection
     let obfuscatedCode: string;
     switch (input.language) {

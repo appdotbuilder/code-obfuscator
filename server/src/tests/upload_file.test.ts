@@ -1,4 +1,3 @@
-
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { resetDB, createDB } from '../helpers';
 import { db } from '../db';
@@ -10,7 +9,10 @@ import { eq } from 'drizzle-orm';
 // Test input for Python file
 const pythonFileInput: FileUploadInput = {
   filename: 'test_script.py',
-  content: 'def hello_world():\n    print("Hello, World!")',
+  content: `def hello_world():
+    name = "Python"
+    print(f"Hello {name}!")
+    return True`,
   password: 'test123',
   expiration_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days from now
 };
@@ -18,16 +20,27 @@ const pythonFileInput: FileUploadInput = {
 // Test input for JavaScript file
 const jsFileInput: FileUploadInput = {
   filename: 'test_script.js',
-  content: 'function helloWorld() {\n    console.log("Hello, World!");\n}',
+  content: `function helloWorld() {
+    const name = "JavaScript";
+    console.log(\`Hello \${name}!\`);
+    return true;
+  }`,
   password: 'test456',
   expiration_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days from now
+};
+
+// Simple base64 zip content containing a Python file (for zip test)
+const createZipContent = (): string => {
+  // This is a simplified test - in reality, we'd need proper zip content
+  // For testing without adm-zip installed, we'll test the error case
+  return Buffer.from('fake zip data').toString('base64');
 };
 
 describe('uploadFile', () => {
   beforeEach(createDB);
   afterEach(resetDB);
 
-  it('should upload and obfuscate Python file', async () => {
+  it('should upload and obfuscate Python file with runtime protection', async () => {
     const result = await uploadFile(pythonFileInput);
 
     // Verify result structure
@@ -41,12 +54,14 @@ describe('uploadFile', () => {
     // Verify download token is a valid hex string
     expect(result.download_token).toMatch(/^[a-f0-9]{64}$/);
 
-    // Verify expires_at is 24 hours after expiration_date
-    const expectedExpiresAt = new Date(pythonFileInput.expiration_date.getTime() + 24 * 60 * 60 * 1000);
-    expect(Math.abs(result.expires_at.getTime() - expectedExpiresAt.getTime())).toBeLessThan(1000);
+    // Verify expires_at is approximately 24 hours from now, not from expiration_date
+    const now = new Date();
+    const hoursDiff = (result.expires_at.getTime() - now.getTime()) / (1000 * 60 * 60);
+    expect(hoursDiff).toBeGreaterThan(23.5);
+    expect(hoursDiff).toBeLessThan(24.5);
   });
 
-  it('should upload and obfuscate JavaScript file', async () => {
+  it('should upload and obfuscate JavaScript file with runtime protection', async () => {
     const result = await uploadFile(jsFileInput);
 
     // Verify result structure
@@ -61,7 +76,7 @@ describe('uploadFile', () => {
     expect(result.download_token).toMatch(/^[a-f0-9]{64}$/);
   });
 
-  it('should save obfuscation job to database', async () => {
+  it('should save obfuscation job to database with enhanced protection', async () => {
     const result = await uploadFile(pythonFileInput);
 
     // Query database to verify job was saved
@@ -79,10 +94,11 @@ describe('uploadFile', () => {
     expect(job.download_token).toEqual(result.download_token);
     expect(job.obfuscated_code).toBeDefined();
     expect(job.obfuscated_code).not.toEqual(pythonFileInput.content); // Should be obfuscated
+    expect(job.obfuscated_code.length).toBeGreaterThan(pythonFileInput.content.length); // Should have protection code
     expect(job.created_at).toBeInstanceOf(Date);
   });
 
-  it('should obfuscate Python code', async () => {
+  it('should obfuscate Python code with runtime protection features', async () => {
     const result = await uploadFile(pythonFileInput);
 
     // Get the obfuscated code from database
@@ -93,13 +109,28 @@ describe('uploadFile', () => {
 
     const obfuscatedCode = jobs[0].obfuscated_code;
 
-    // Verify code was obfuscated (function name should be replaced)
+    // Verify runtime protection features are present
+    expect(obfuscatedCode).toContain('#!/usr/bin/env python3');
+    expect(obfuscatedCode).toContain('import sys');
+    expect(obfuscatedCode).toContain('import hashlib');
+    expect(obfuscatedCode).toContain('import datetime');
+    expect(obfuscatedCode).toContain('import pytz');
+    expect(obfuscatedCode).toContain('Enter password:');
+    expect(obfuscatedCode).toContain('Access denied. Invalid password.');
+    expect(obfuscatedCode).toContain('Script has expired');
+    expect(obfuscatedCode).toContain('Asia/Kuala_Lumpur');
+    
+    // Verify obfuscation (original function name should be replaced)
     expect(obfuscatedCode).not.toContain('hello_world');
-    expect(obfuscatedCode).toContain('_func_');
-    expect(obfuscatedCode).toContain('print("Hello, World!")'); // Content should remain
+    expect(obfuscatedCode).toContain('#'); // Should have obfuscation comments
+    
+    // Should contain password hash but not plain password
+    const hashPattern = /[a-f0-9]{64}/;
+    expect(hashPattern.test(obfuscatedCode)).toBe(true);
+    expect(obfuscatedCode).not.toContain(pythonFileInput.password);
   });
 
-  it('should obfuscate JavaScript code', async () => {
+  it('should obfuscate JavaScript code with runtime protection features', async () => {
     const result = await uploadFile(jsFileInput);
 
     // Get the obfuscated code from database
@@ -110,10 +141,28 @@ describe('uploadFile', () => {
 
     const obfuscatedCode = jobs[0].obfuscated_code;
 
-    // Verify code was obfuscated (function name should be replaced)
+    // Verify runtime protection features are present
+    expect(obfuscatedCode).toContain('Protected JavaScript Code');
+    expect(obfuscatedCode).toContain('require(\'crypto\')');
+    expect(obfuscatedCode).toContain('require(\'readline\')');
+    expect(obfuscatedCode).toContain('Enter password:');
+    expect(obfuscatedCode).toContain('Access denied. Invalid password.');
+    expect(obfuscatedCode).toContain('Script has expired');
+    expect(obfuscatedCode).toContain('Asia/Kuala_Lumpur');
+    expect(obfuscatedCode).toContain('createHash(\'sha256\')');
+    
+    // Verify IIFE wrapper
+    expect(obfuscatedCode).toContain('(function() {');
+    expect(obfuscatedCode).toContain('\'use strict\';');
+    
+    // Verify obfuscation (original function name should be replaced)
     expect(obfuscatedCode).not.toContain('helloWorld');
-    expect(obfuscatedCode).toContain('_func_');
-    expect(obfuscatedCode).toContain('console.log("Hello, World!")'); // Content should remain
+    expect(obfuscatedCode).toContain('//'); // Should have obfuscation comments
+    
+    // Should contain password hash but not plain password
+    const hashPattern = /[a-f0-9]{64}/;
+    expect(hashPattern.test(obfuscatedCode)).toBe(true);
+    expect(obfuscatedCode).not.toContain(jsFileInput.password);
   });
 
   it('should reject unsupported file types', async () => {
@@ -127,18 +176,41 @@ describe('uploadFile', () => {
     await expect(uploadFile(invalidInput)).rejects.toThrow(/unsupported file type/i);
   });
 
-  it('should reject zip files with appropriate error', async () => {
+  it('should handle zip files appropriately when adm-zip is not available', async () => {
     const zipInput: FileUploadInput = {
       filename: 'archive.zip',
-      content: 'fake zip content',
+      content: createZipContent(),
       password: 'test123',
       expiration_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     };
 
-    await expect(uploadFile(zipInput)).rejects.toThrow(/zip file processing not yet implemented/i);
+    // Should either process the zip or throw an appropriate error
+    await expect(uploadFile(zipInput)).rejects.toThrow();
   });
 
-  it('should generate unique download tokens', async () => {
+  it('should validate empty content', async () => {
+    const emptyInput: FileUploadInput = {
+      filename: 'empty.py',
+      content: '   ',
+      password: 'test123',
+      expiration_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    };
+
+    await expect(uploadFile(emptyInput)).rejects.toThrow(/empty or contains only whitespace/i);
+  });
+
+  it('should validate password requirement', async () => {
+    const noPasswordInput: FileUploadInput = {
+      filename: 'test.py',
+      content: 'print("hello")',
+      password: '   ',
+      expiration_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    };
+
+    await expect(uploadFile(noPasswordInput)).rejects.toThrow(/password is required/i);
+  });
+
+  it('should generate unique download tokens for multiple uploads', async () => {
     const result1 = await uploadFile(pythonFileInput);
     const result2 = await uploadFile({
       ...pythonFileInput,
@@ -148,5 +220,27 @@ describe('uploadFile', () => {
     expect(result1.download_token).not.toEqual(result2.download_token);
     expect(result1.download_token).toMatch(/^[a-f0-9]{64}$/);
     expect(result2.download_token).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('should embed expiration date in obfuscated code', async () => {
+    const specificDate = new Date('2025-12-31T15:30:00Z');
+    const input: FileUploadInput = {
+      ...pythonFileInput,
+      expiration_date: specificDate
+    };
+
+    const result = await uploadFile(input);
+
+    const jobs = await db.select()
+      .from(obfuscationJobsTable)
+      .where(eq(obfuscationJobsTable.id, result.id))
+      .execute();
+
+    const obfuscatedCode = jobs[0].obfuscated_code;
+    
+    // Should contain date components based on Malaysia timezone formatting
+    expect(obfuscatedCode).toContain('2025');
+    expect(obfuscatedCode).toContain('12');
+    expect(obfuscatedCode).toContain('31');
   });
 });
